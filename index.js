@@ -2,7 +2,7 @@ const express = require('express')
 const app = express()
 require('dotenv').config()
 const cors = require('cors')
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = 3000
 
 app.use(cors())
@@ -24,13 +24,27 @@ async function run() {
     console.log("MongoDB Connected Successfully!");
 
     // ✅ এখানে তোমার ডাটাবেস কালেকশন ব্যবহার করতে পারবে
-    const productCollection = client.db("panjabi-server").collection("products"); // কালেকশনের নাম
+    const productCollection = client.db("panjabi-server").collection("products");
+    const cartsCollection = client.db("panjabi-server").collection("carts");
 
     // 🔹 API Route: সব প্রোডাক্ট পাওয়া যাবে
     app.get('/products', async (req, res) => {
       const products = await productCollection.find().toArray();
       res.send(products);
     });
+
+    app.get('/products/:id', async (req,res) =>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await productCollection.findOne(query);
+      res.send(result)
+    });
+
+    app.post('/carts', async (req,res)=>{
+      const cartsItem = req.body;
+      const result = await cartsCollection.insertOne(cartsItem);
+      res.send(result)
+    })
 
   } catch (error) {
     console.error("Database Connection Error:", error);
