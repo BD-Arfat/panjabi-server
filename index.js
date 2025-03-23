@@ -26,6 +26,7 @@ async function run() {
     // ✅ এখানে তোমার ডাটাবেস কালেকশন ব্যবহার করতে পারবে
     const productCollection = client.db("panjabi-server").collection("products");
     const cartsCollection = client.db("panjabi-server").collection("carts");
+    const usersCollection = client.db("panjabi-server").collection("users");
 
     // 🔹 API Route: সব প্রোডাক্ট পাওয়া যাবে
     app.get('/products', async (req, res) => {
@@ -57,6 +58,12 @@ async function run() {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await cartsCollection.deleteOne(query);
+      res.send(result)
+    });
+
+    app.post('/carts', async(req,res)=>{
+      const cartItem = req.body;
+      const result = await cartsCollection.insertOne(cartItem);
       res.send(result)
     })
 
