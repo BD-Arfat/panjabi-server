@@ -61,9 +61,19 @@ async function run() {
       res.send(result)
     });
 
-    app.post('/carts', async(req,res)=>{
+    app.post('/users', async(req,res)=>{
       const cartItem = req.body;
-      const result = await cartsCollection.insertOne(cartItem);
+      const query = {email : cartItem.email};
+      const existingUser = await usersCollection.findOne(query);
+      if(existingUser){
+        return res.send({message : 'user already exists', inSertId : null})
+      }
+      const result = await usersCollection.insertOne(cartItem);
+      res.send(result)
+    });
+
+    app.get('/users', async (req, res)=>{
+      const result = await usersCollection.find().toArray();
       res.send(result)
     })
 
