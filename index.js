@@ -60,15 +60,17 @@ async function run() {
     };
     
 
-    const verifyAdmin = async (req,res, next) =>{
+    const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
-      const query = {email : email};
+      const query = { email };
       const user = await usersCollection.findOne(query);
-      const isAdmin = user.role === 'admin';
-      if(!isAdmin){
-        return res.status(403).send({message : 'forbiden access'})
+      const isAdmin = user?.role === 'admin';
+      if (!isAdmin) {
+        return res.status(403).send({ message: 'forbidden access' });
       }
+      next(); // এটা ভুলে গিয়েছিলে
     }
+    
 
 
     // admin
@@ -93,12 +95,43 @@ async function run() {
       res.send(products);
     });
 
+    app.post('/products', verifyToken, verifyAdmin, async (req,res)=>{
+      const item = req.body;
+      const result = await productCollection.insertOne(item);
+      res.send(result)
+    })
+
+    app.patch('/products/:id', async (req,res)=>{
+      const item = req.body;
+      const id = req.params.id;
+      const filter = {_id : new ObjectId(id)};
+      const updatedDoc ={
+        $set : {
+          name : item.name,
+            price : item.price,
+            category : item.category,
+            categoryImage : item.categoryImage,
+            color : item.color,
+            section : item.section,
+            details : item.details
+        }
+      }
+      const result = await productCollection.updateOne(filter, updatedDoc);
+      res.send(result)
+    })
+
     app.get('/products/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await productCollection.findOne(query);
       res.send(result)
     });
+    app.delete('/products/:id', verifyToken, verifyAdmin, async(req, res)=>{
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id)};
+      const result = await productCollection.deleteOne(query);
+      res.send(result)
+    })
 
     app.post('/carts', async (req, res) => {
       const cartsItem = req.body;
