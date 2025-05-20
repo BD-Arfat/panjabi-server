@@ -4,6 +4,7 @@ require('dotenv').config()
 const cors = require('cors')
 const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_KEY);
 const port = 3000
 
 app.use(cors())
@@ -29,6 +30,7 @@ async function run() {
     const cartsCollection = client.db("panjabi-server").collection("carts");
     const usersCollection = client.db("panjabi-server").collection("users");
     const reviewCollection = client.db("panjabi-server").collection("review");
+    const paymentCollection = client.db("panjabi-server").collection("payment");
 
 
     // jwt function
@@ -48,7 +50,7 @@ async function run() {
       if (!req.headers.authorization) {
         return res.status(401).send({ message: 'forbidden hidden' });
       }
-    
+
       const token = req.headers.authorization.split(' ')[1];
       jwt.verify(token, process.env.ACCESS_TOKEN, (error, decoded) => {
         if (error) {
@@ -58,7 +60,7 @@ async function run() {
         next(); // শুধু তখনই চলবে যখন সবকিছু ঠিক থাকে
       });
     };
-    
+
 
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
@@ -70,7 +72,7 @@ async function run() {
       }
       next(); // এটা ভুলে গিয়েছিলে
     }
-    
+
 
 
     // admin
@@ -95,25 +97,25 @@ async function run() {
       res.send(products);
     });
 
-    app.post('/products', verifyToken, verifyAdmin, async (req,res)=>{
+    app.post('/products', verifyToken, verifyAdmin, async (req, res) => {
       const item = req.body;
       const result = await productCollection.insertOne(item);
       res.send(result)
     })
 
-    app.patch('/products/:id', async (req,res)=>{
+    app.patch('/products/:id', async (req, res) => {
       const item = req.body;
       const id = req.params.id;
-      const filter = {_id : new ObjectId(id)};
-      const updatedDoc ={
-        $set : {
-          name : item.name,
-            price : item.price,
-            category : item.category,
-            categoryImage : item.categoryImage,
-            color : item.color,
-            section : item.section,
-            details : item.details
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          name: item.name,
+          price: item.price,
+          category: item.category,
+          categoryImage: item.categoryImage,
+          color: item.color,
+          section: item.section,
+          details: item.details
         }
       }
       const result = await productCollection.updateOne(filter, updatedDoc);
@@ -126,9 +128,9 @@ async function run() {
       const result = await productCollection.findOne(query);
       res.send(result)
     });
-    app.delete('/products/:id', verifyToken, verifyAdmin, async(req, res)=>{
+    app.delete('/products/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
-      const query = { _id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await productCollection.deleteOne(query);
       res.send(result)
     })
@@ -215,7 +217,70 @@ async function run() {
       const query = { productId: id };
       const result = await reviewCollection.find(query).toArray();
       res.send(result)
+    });
+
+    // payment releted code
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100); // converting to paisa/cent
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    // *************
+
+    app.post('/payments', async (req, res) => {
+      const payment = req.body;
+      const paymentResult = await paymentCollection.insertOne(payment);
+      const query = {
+        _id: {
+          $in: payment.cardIds.map(id => new ObjectId(id))
+        }
+      };
+      const deleteResult = await cartsCollection.deleteMany(query);
+      res.send({ paymentResult, deleteResult })
     })
+    // ***************--------
+
+    app.get('/payments/:email', verifyToken, async (req, res) => {
+      const query = { email: req.decoded.email };
+      if (req.params.email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access' })
+      }
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result)
+    })
+    // ***********
+
+    app.get('/admin/payments', verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const result = await paymentCollection.find().sort({ date: -1 }).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to fetch all payments', error });
+      }
+    });
+
+
+    // /////////***----- */
+
+    app.patch('/payments/status/:id', async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+      const result = await paymentCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: status } }
+      );
+      res.send(result);
+    });
 
   } catch (error) {
     console.error("Database Connection Error:", error);
