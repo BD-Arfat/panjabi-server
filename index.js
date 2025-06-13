@@ -270,6 +270,30 @@ async function run() {
     });
 
 
+    // dashboard 
+    app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+      const users = await usersCollection.estimatedDocumentCount();
+      const products = await productCollection.estimatedDocumentCount();
+      const reviews = await reviewCollection.estimatedDocumentCount();
+      const orders = await paymentCollection.estimatedDocumentCount();
+
+      const result = await paymentCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalRevenue: {
+              $sum: '$price'
+            }
+          }
+        }
+      ]).toArray()
+
+      const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+
+      res.send({ users, products, reviews, orders, revenue })
+    })
+
+
     // /////////***----- */
 
     app.patch('/payments/status/:id', async (req, res) => {
@@ -281,6 +305,69 @@ async function run() {
       );
       res.send(result);
     });
+
+  
+
+    app.get('/order-stats', verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const result = await paymentCollection.aggregate([
+          // Step 1: unwind the array of productIds
+          { $unwind: '$productIds' },
+
+          // Step 2: Make sure each productId is an ObjectId
+          {
+            $addFields: {
+              productId: {
+                $cond: {
+                  if: { $eq: [{ $type: '$productIds' }, 'objectId'] },
+                  then: '$productIds',
+                  else: { $toObjectId: '$productIds' }
+                }
+              }
+            }
+          },
+
+          // Step 3: Lookup from products collection
+          {
+            $lookup: {
+              from: 'products',
+              localField: 'productId',
+              foreignField: '_id',
+              as: 'productInfo'
+            }
+          },
+
+          // Step 4: unwind again
+          { $unwind: '$productInfo' },
+
+          // Step 5: group by product title
+          {
+            $group: {
+              _id: '$productInfo.category',
+              quantity: { $sum: 1 },
+              revenue : {$sum : '$productInfo.price'}
+            }
+          },
+          {
+            $project : {
+              _id : 0,
+              category : '$_id',
+              quantity : '$quantity',
+              revenue : '$revenue'
+            }
+          }
+        ]).toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error('Error in /order-stats:', error);
+        res.status(500).send({ message: 'Internal Server Error', error: error.message });
+      }
+    });
+
+
+
+    // ------------------------ end ----------------------//
 
   } catch (error) {
     console.error("Database Connection Error:", error);
