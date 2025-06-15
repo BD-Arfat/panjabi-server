@@ -22,7 +22,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     console.log("MongoDB Connected Successfully!");
 
     // ✅ এখানে তোমার ডাটাবেস কালেকশন ব্যবহার করতে পারবে
@@ -271,6 +271,29 @@ async function run() {
 
 
     // dashboard 
+    // user dashboard stats
+    app.get('/user-stats', verifyToken, async (req, res) => {
+      const email = req.decoded.email;
+      const orders = await paymentCollection.find({ email }).toArray();
+
+      const totalOrders = orders.length;
+
+      const totalSpending = orders.reduce((acc, order) => acc + (order.price || 0), 0);
+
+
+      const totalItemsOrdered = orders.reduce((acc, order) => acc + (order.quantity || 1), 0);
+
+      res.send({
+        totalOrders,
+        totalSpending,
+        totalItemsOrdered,
+        recentOrders: orders.slice(-5).reverse() // recent 5 ta order
+      });
+    });
+
+
+
+    // admin dashbord
     app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
       const users = await usersCollection.estimatedDocumentCount();
       const products = await productCollection.estimatedDocumentCount();
@@ -306,7 +329,7 @@ async function run() {
       res.send(result);
     });
 
-  
+
 
     app.get('/order-stats', verifyToken, verifyAdmin, async (req, res) => {
       try {
@@ -345,15 +368,15 @@ async function run() {
             $group: {
               _id: '$productInfo.category',
               quantity: { $sum: 1 },
-              revenue : {$sum : '$productInfo.price'}
+              revenue: { $sum: '$productInfo.price' }
             }
           },
           {
-            $project : {
-              _id : 0,
-              category : '$_id',
-              quantity : '$quantity',
-              revenue : '$revenue'
+            $project: {
+              _id: 0,
+              category: '$_id',
+              quantity: '$quantity',
+              revenue: '$revenue'
             }
           }
         ]).toArray();
